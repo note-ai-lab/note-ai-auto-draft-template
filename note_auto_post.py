@@ -357,17 +357,17 @@ def save_draft(article: Article, headless: bool = True) -> None:
                     page.keyboard.press("Enter")
                     human_delay(0.5, 1.5)
 
-                log("有料部分(固定文)を入力中(貼り付け方式)...")
+                log("有料部分(固定文)を入力中...")
                 for paragraph in article.fixed_part.split("\n\n"):
                     if not paragraph.strip():
                         continue
-                    # 1文字ずつのタイピングだと大量の文字でエディタが処理落ちし、
-                    # 内容が消えてしまうことがあるため、insertText で
-                    # 貼り付けと同じように1回のイベントとして流し込む。
-                    page.keyboard.insert_text(paragraph)
+                    # insertText(貼り付け相当)は note のエディタに正しく認識されない
+                    # ことがあるため、実際のキー入力に近い type() を使う。
+                    # 速度は人間らしさより実行時間の短縮を優先し、1文字5msに設定。
+                    page.keyboard.type(paragraph, delay=5)
                     page.keyboard.press("Enter")
                     page.keyboard.press("Enter")
-                    page.wait_for_timeout(100)  # 段落ごとに短い間を置き、エディタの反映を待つ
+                    human_delay(0.2, 0.4)
             else:
                 # hook/fixed_part が無い場合(手動でbodyだけ指定したケース)は
                 # 従来通り全文をゆっくり入力する。
@@ -389,6 +389,16 @@ def save_draft(article: Article, headless: bool = True) -> None:
                     f"期待: '{article.title}')。入力内容が消えている可能性があります。")
             else:
                 log("タイトルの入力内容を確認しました。")
+
+            # 本文が実際にエディタに反映されているかも確認する。
+            # (見た目上エラーが出なくても、内容が消えてしまうケースがあるため)
+            body_text = page.locator(body_selector).first.text_content() or ""
+            expected_min_len = len(article.body) * 0.5  # ある程度の余裕を持たせた最低文字数
+            if len(body_text) < expected_min_len:
+                log(f"警告: 本文の文字数が想定より少ないです(実際: {len(body_text)}文字 / "
+                    f"期待: 約{len(article.body)}文字)。入力内容が消えている可能性があります。")
+            else:
+                log(f"本文の入力内容を確認しました(約{len(body_text)}文字)。")
 
             # 自動保存によって draft ID が付与され、URLが /notes/xxxxx/edit に
             # 変わるのを待つ。これが確認できて初めて「下書きとして保存された」と言える。
