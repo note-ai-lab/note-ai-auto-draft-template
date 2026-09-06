@@ -78,7 +78,9 @@ def human_type(page: Page, selector: str, text: str) -> None:
 @dataclass
 class Article:
     title: str
-    body: str  # 本文。段落は \n\n で区切る
+    body: str  # 本文全体(hook + fixed_part を結合したもの。ログ・保存用)
+    hook: str = ""  # 無料部分(AI生成)。ゆっくり人間らしく入力する
+    fixed_part: str = ""  # 有料部分(固定文)。高速に入力する
 
 
 # 有料部分(毎回同じ内容)。ここを直接編集してカスタマイズしてください。
@@ -257,7 +259,7 @@ AI・GitHub Actions・noteを連携させて、記事作成からnoteへの下�
 
     # 無料部分(AI生成・毎回変わる)+ 有料部分(固定)を結合
     full_body = f"{hook}\n\n{PAID_CONTENT}"
-    return Article(title=title, body=full_body)
+    return Article(title=title, body=full_body, hook=hook, fixed_part=PAID_CONTENT)
 
 
 
@@ -342,16 +344,51 @@ def save_draft(article: Article, headless: bool = True) -> None:
             page.click(body_selector)
             human_delay(0.5, 1)
 
-            # 本文を段落ごとに分けてタイプ(一括流し込みより自然な負荷)
-            for paragraph in article.body.split("\n\n"):
-                if not paragraph.strip():
-                    continue
-                page.keyboard.type(paragraph, delay=random.uniform(30, 90))
-                page.keyboard.press("Enter")
-                page.keyboard.press("Enter")
-                human_delay(0.5, 1.5)
+            # 本文を段落ごとに分けてタイプ。
+            # 無料部分(AI生成・短い)は人間らしくゆっくり、
+            # 有料部分(固定文・長い)は高速に入力し、実行時間を抑える。
+            if article.hook and article.fixed_part:
+                log("無料部分(導入文)を入力中...")
+                for paragraph in article.hook.split("\n\n"):
+                    if not paragraph.strip():
+                        continue
+                    page.keyboard.type(paragraph, delay=random.uniform(30, 90))
+                    page.keyboard.press("Enter")
+                    page.keyboard.press("Enter")
+                    human_delay(0.5, 1.5)
+
+                log("有料部分(固定文)を入力中(貼り付け方式)...")
+                for paragraph in article.fixed_part.split("\n\n"):
+                    if not paragraph.strip():
+                        continue
+                    # 1文字ずつのタイピングだと大量の文字でエディタが処理落ちし、
+                    # 内容が消えてしまうことがあるため、insertText で
+                    # 貼り付けと同じように1回のイベントとして流し込む。
+                    page.keyboard.insert_text(paragraph)
+                    page.keyboard.press("Enter")
+                    page.keyboard.press("Enter")
+                    page.wait_for_timeout(100)  # 段落ごとに短い間を置き、エディタの反映を待つ
+            else:
+                # hook/fixed_part が無い場合(手動でbodyだけ指定したケース)は
+                # 従来通り全文をゆっくり入力する。
+                for paragraph in article.body.split("\n\n"):
+                    if not paragraph.strip():
+                        continue
+                    page.keyboard.type(paragraph, delay=random.uniform(30, 90))
+                    page.keyboard.press("Enter")
+                    page.keyboard.press("Enter")
+                    human_delay(0.5, 1.5)
 
             human_delay(1, 2)
+
+            # 実際にタイトルが入力された状態になっているか検証する。
+            # (エディタの処理落ちなどで、入力したはずの内容が消えるケースがあるため)
+            actual_title = page.locator(title_selector).input_value()
+            if actual_title.strip() != article.title.strip():
+                log(f"警告: タイトルが期待した内容と異なります(現在: '{actual_title}' / "
+                    f"期待: '{article.title}')。入力内容が消えている可能性があります。")
+            else:
+                log("タイトルの入力内容を確認しました。")
 
             # 自動保存によって draft ID が付与され、URLが /notes/xxxxx/edit に
             # 変わるのを待つ。これが確認できて初めて「下書きとして保存された」と言える。
