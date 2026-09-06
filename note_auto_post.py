@@ -122,6 +122,7 @@ PAID_CONTENT = """【ここから有料エリア】
 以下のリンクから、必要なファイル一式(コード・設定ファイル・認証情報変換ツール)を入手できます。
 
 [ここにご自身のテンプレートリポジトリのURLを入れてください]
+https://github.com/mitsu9214/note-ai-auto-draft-template
 
 「Use this template」ボタンから、自分のアカウントに複製してお使いください。
 
