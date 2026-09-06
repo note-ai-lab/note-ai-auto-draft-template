@@ -1,11 +1,11 @@
 # note AI自動下書き投稿テンプレート
 
-Claude(AI)・GitHub Actions・noteを連携させて、記事作成からnoteへの下書き保存までを
+Google Gemini(AI)・GitHub Actions・noteを連携させて、記事作成からnoteへの下書き保存までを
 半自動化するためのテンプレートです。
 
 ## できること
 
-- テーマを1つ指定するだけで、Claude AIが記事のタイトル・本文を自動生成
+- テーマを1つ指定するだけで、Gemini AIが記事のタイトル・本文を自動生成
 - 生成した記事をnoteの下書きに自動保存
 - 価格設定・公開は仕様上手動(下書き確認後、ご自身で設定してください)
 
@@ -13,7 +13,7 @@ Claude(AI)・GitHub Actions・noteを連携させて、記事作成からnoteへ
 
 - GitHubアカウント(無料)
 - note.comアカウント
-- Anthropic APIキー([console.anthropic.com](https://console.anthropic.com)で発行)
+- Google Gemini APIキー([aistudio.google.com](https://aistudio.google.com)で無料発行。支払い情報の登録も不要です)
 
 ## 使い方
 
@@ -21,7 +21,7 @@ Claude(AI)・GitHub Actions・noteを連携させて、記事作成からnoteへ
 
 概要:
 1. このテンプレートを「Use this template」から複製
-2. GitHubのSecretsに `NOTE_EMAIL` / `NOTE_PASSWORD` / `NOTE_AUTH_STATE_B64` / `ANTHROPIC_API_KEY` を登録
+2. GitHubのSecretsに `NOTE_EMAIL` / `NOTE_PASSWORD` / `NOTE_AUTH_STATE_B64` / `GEMINI_API_KEY` を登録
 3. `cookie_converter.html` を使って認証情報を作成
 4. `topic_example.json` にテーマを記入
 5. GitHub Actionsの「Run workflow」で実行
@@ -40,3 +40,4 @@ Claude(AI)・GitHub Actions・noteを連携させて、記事作成からnoteへ
 
 - リポジトリは必ずPrivateで運用し、Secretsに登録した情報は第三者に共有しないでください
 - 生成された記事は公開前に必ず内容を確認してください
+- Gemini APIは無料枠に利用回数の上限があります。頻繁に実行する場合は制限に注意してください
