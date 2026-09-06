@@ -2,7 +2,7 @@
 note AI記事生成 + 下書き自動投稿スクリプト(低負荷設計)
 
 【このバージョンでできること】
-- テーマ(お題)を渡すと、Claude API が記事のタイトル・本文を自動生成
+- テーマ(お題)を渡すと、Google Gemini API が記事のタイトル・本文を自動生成
 - 生成した内容を note の新規投稿画面に自動入力し、下書きとして保存
 - 価格設定・有料エリア指定・公開(投稿する)は行わない
   → note の仕様上、価格は「投稿する」を押す瞬間にしか保存されないため、
@@ -15,12 +15,12 @@ note AI記事生成 + 下書き自動投稿スクリプト(低負荷設計)
 - 失敗時は自動リトライせず、ログを残して人間が確認する設計(暴走防止)
 
 【事前準備】
-1. pip install playwright anthropic --break-system-packages
+1. pip install playwright google-generativeai --break-system-packages
 2. playwright install chromium
 3. 環境変数を設定
      export NOTE_EMAIL="you@example.com"
      export NOTE_PASSWORD="xxxxx"
-     export ANTHROPIC_API_KEY="sk-ant-..."
+     export GEMINI_API_KEY="AIza..."
 4. 初回のみ --login-only で実行し、Cookie(auth_state.json)を保存
 5. 以降はテーマ(お題)を渡して実行
 
@@ -51,8 +51,8 @@ LOG_PATH = Path("note_auto_post.log")
 NOTE_LOGIN_URL = "https://note.com/login"
 NOTE_NEW_POST_URL = "https://note.com/notes/new"
 
-# 生成に使う Claude のモデル。必要に応じて変更してください。
-CLAUDE_MODEL = "claude-sonnet-5"
+# 生成に使う Gemini のモデル。無料枠での利用を想定し、軽量なモデルを指定。
+GEMINI_MODEL = "gemini-2.5-flash"
 
 
 def log(msg: str) -> None:
@@ -91,7 +91,7 @@ PAID_CONTENT = """【ここから有料エリア】
 
 この仕組みは3つのサービスを組み合わせています。
 
-1つ目はClaude(AI)です。テーマを渡すと、記事のタイトルと本文を自動で書いてくれます。
+1つ目はGoogle Gemini(AI)です。テーマを渡すと、記事のタイトルと本文を自動で書いてくれます。無料枠の範囲内であれば、費用は一切かかりません。
 
 2つ目はGitHub Actionsです。指定した時間に、あるいはボタン一つで、裏側のクラウドサーバーが自動でブラウザを操作し、noteへの投稿作業をこなしてくれます。パソコンをつけっぱなしにする必要はありません。スマホからボタンを押すだけで動かせます。
 
@@ -103,7 +103,7 @@ PAID_CONTENT = """【ここから有料エリア】
 
 ・GitHubの無料アカウント
 ・note.comのアカウント(有料記事を書く予定のもの)
-・Anthropic社のAPIキー(Claudeを呼び出すために必要。従量課金ですが、記事1本あたり数円〜数十円程度です)
+・Google AI StudioのAPIキー(AIを呼び出すために必要。無料枠の範囲内であれば無料で使えます。支払い情報の登録も不要です)
 ・パソコン(初回のログイン作業だけで使用します。以降はスマホだけで運用できます)
 
 ■ セットアップ手順(全体の流れ)
@@ -111,7 +111,7 @@ PAID_CONTENT = """【ここから有料エリア】
 このテンプレートを使えば、以下の流れで環境が整います。
 
 1. 下記のテンプレートリポジトリを、自分のGitHubアカウントに複製する
-2. GitHubのSecrets(秘密情報の保管庫)に、noteのログイン情報とAnthropicのAPIキーを登録する
+2. GitHubのSecrets(秘密情報の保管庫)に、noteのログイン情報とGoogle Gemini APIのキーを登録する
 3. noteに一度ログインして、認証情報(Cookie)を作成し、Secretsに登録する
 4. テーマを書いたファイルを用意する
 5. GitHub Actionsの「Run workflow」ボタンを押す
@@ -121,7 +121,6 @@ PAID_CONTENT = """【ここから有料エリア】
 
 以下のリンクから、必要なファイル一式(コード・設定ファイル・認証情報変換ツール)を入手できます。
 
-[ここにご自身のテンプレートリポジトリのURLを入れてください]
 https://github.com/mitsu9214/note-ai-auto-draft-template
 
 「Use this template」ボタンから、自分のアカウントに複製してお使いください。
@@ -139,7 +138,7 @@ https://github.com/mitsu9214/note-ai-auto-draft-template
 ・NOTE_EMAIL … noteのログイン用メールアドレス
 ・NOTE_PASSWORD … noteのログインパスワード
 ・NOTE_AUTH_STATE_B64 … noteのログイン状態を保存したデータ(cookie_converter.htmlで作成します)
-・ANTHROPIC_API_KEY … Claude APIのキー(console.anthropic.comで発行できます)
+・GEMINI_API_KEY … Google Gemini APIのキー(aistudio.google.comで無料発行できます)
 
 ■ 認証情報(Cookie)の作り方
 
@@ -158,7 +157,7 @@ Cookieには有効期限があるため、数週間〜数ヶ月に一度、同�
 ・topic_example.json の "topic" … 書いてほしい記事のテーマを指定します
 ・topic_example.json の "guidelines" … 文体やトーンの指示(「〜だ、〜である調で」「初心者向けに」など)
 ・topic_example.json の "target_chars" … 記事のおおよその文字数
-・note_auto_post.py 内の CLAUDE_MODEL … 使用するClaudeのモデル名(コストや文章のクオリティに応じて変更可能)
+・note_auto_post.py 内の GEMINI_MODEL … 使用するGeminiのモデル名(無料枠の上限や文章のクオリティに応じて変更可能)
 ・post.yml 内の cron … 自動実行したい時間(協定世界時での指定のため、日本時間から9時間引いて設定してください)
 
 ■ つまずきやすいポイント(実体験のトラブルシューティング)
@@ -185,19 +184,20 @@ Cookieには有効期限があるため、数週間〜数ヶ月に一度、同�
 
 def generate_hook(angle: str, guidelines: str = "") -> Article:
     """
-    無料部分(導入・フック)だけをClaude APIで生成する。
+    無料部分(導入・フック)だけをGoogle Gemini APIで生成する。
     有料部分は PAID_CONTENT(固定文)を使うため、ここでは生成しない。
     angle には「今回はどんな読者に刺さる切り口で書くか」を指定する
     (例: '副業に興味がある会社員向け', '文章を書くのが苦手な人向け' など)。
     """
-    import anthropic
+    import google.generativeai as genai
 
-    api_key = os.environ.get("ANTHROPIC_API_KEY")
+    api_key = os.environ.get("GEMINI_API_KEY")
     if not api_key:
-        log("環境変数 ANTHROPIC_API_KEY が設定されていません。")
+        log("環境変数 GEMINI_API_KEY が設定されていません。")
         sys.exit(1)
 
-    client = anthropic.Anthropic(api_key=api_key)
+    genai.configure(api_key=api_key)
+    model = genai.GenerativeModel(GEMINI_MODEL)
 
     guideline_text = f"\n\n【追加の指示】\n{guidelines}" if guidelines else ""
 
@@ -205,7 +205,7 @@ def generate_hook(angle: str, guidelines: str = "") -> Article:
 これから、ある有料記事の「無料部分(冒頭の導入文)」だけを書いてください。
 
 【商品の内容(有料部分に書かれている内容。あなたはここを直接書く必要はありません)】
-Claude(AI)・GitHub Actions・noteを連携させて、記事作成からnoteへの下書き保存までを
+AI・GitHub Actions・noteを連携させて、記事作成からnoteへの下書き保存までを
 半自動化する具体的な手順とコード一式。
 
 【今回の切り口・想定読者】
@@ -228,16 +228,9 @@ Claude(AI)・GitHub Actions・noteを連携させて、記事作成からnoteへ
 {guideline_text}
 """
 
-    log(f"Claude ({CLAUDE_MODEL}) で無料部分(導入文)を生成中... 切り口: {angle}")
-    response = client.messages.create(
-        model=CLAUDE_MODEL,
-        max_tokens=2000,
-        messages=[{"role": "user", "content": prompt}],
-    )
-
-    raw_text = "".join(
-        block.text for block in response.content if getattr(block, "type", None) == "text"
-    ).strip()
+    log(f"Gemini ({GEMINI_MODEL}) で無料部分(導入文)を生成中... 切り口: {angle}")
+    response = model.generate_content(prompt)
+    raw_text = (response.text or "").strip()
 
     if raw_text.startswith("```"):
         raw_text = raw_text.strip("`")
