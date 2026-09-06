@@ -15,7 +15,7 @@ note AI記事生成 + 下書き自動投稿スクリプト(低負荷設計)
 - 失敗時は自動リトライせず、ログを残して人間が確認する設計(暴走防止)
 
 【事前準備】
-1. pip install playwright google-generativeai --break-system-packages
+1. pip install playwright google-genai --break-system-packages
 2. playwright install chromium
 3. 環境変数を設定
      export NOTE_EMAIL="you@example.com"
@@ -52,7 +52,7 @@ NOTE_LOGIN_URL = "https://note.com/login"
 NOTE_NEW_POST_URL = "https://note.com/notes/new"
 
 # 生成に使う Gemini のモデル。無料枠での利用を想定し、軽量なモデルを指定。
-GEMINI_MODEL = "gemini-2.5-flash"
+GEMINI_MODEL = "gemini-3.6-flash"
 
 
 def log(msg: str) -> None:
@@ -189,15 +189,14 @@ def generate_hook(angle: str, guidelines: str = "") -> Article:
     angle には「今回はどんな読者に刺さる切り口で書くか」を指定する
     (例: '副業に興味がある会社員向け', '文章を書くのが苦手な人向け' など)。
     """
-    import google.generativeai as genai
+    from google import genai
 
     api_key = os.environ.get("GEMINI_API_KEY")
     if not api_key:
         log("環境変数 GEMINI_API_KEY が設定されていません。")
         sys.exit(1)
 
-    genai.configure(api_key=api_key)
-    model = genai.GenerativeModel(GEMINI_MODEL)
+    client = genai.Client(api_key=api_key)
 
     guideline_text = f"\n\n【追加の指示】\n{guidelines}" if guidelines else ""
 
@@ -229,7 +228,10 @@ AI・GitHub Actions・noteを連携させて、記事作成からnoteへの下�
 """
 
     log(f"Gemini ({GEMINI_MODEL}) で無料部分(導入文)を生成中... 切り口: {angle}")
-    response = model.generate_content(prompt)
+    response = client.models.generate_content(
+        model=GEMINI_MODEL,
+        contents=prompt,
+    )
     raw_text = (response.text or "").strip()
 
     if raw_text.startswith("```"):
