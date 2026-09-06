@@ -363,8 +363,9 @@ def save_draft(article: Article, headless: bool = True) -> None:
                         continue
                     # insertText(貼り付け相当)は note のエディタに正しく認識されない
                     # ことがあるため、実際のキー入力に近い type() を使う。
-                    # 速度は人間らしさより実行時間の短縮を優先し、1文字5msに設定。
-                    page.keyboard.type(paragraph, delay=5)
+                    # 5ms/文字だとエディタの処理が追いつかず内容が失われることがあったため
+                    # 20ms/文字に調整(速度より確実性を優先)。
+                    page.keyboard.type(paragraph, delay=20)
                     page.keyboard.press("Enter")
                     page.keyboard.press("Enter")
                     human_delay(0.2, 0.4)
@@ -379,6 +380,8 @@ def save_draft(article: Article, headless: bool = True) -> None:
                     page.keyboard.press("Enter")
                     human_delay(0.5, 1.5)
 
+            # エディタ内部の状態(ProseMirrorなど)がDOMに反映されるまで少し待つ
+            page.wait_for_timeout(2000)
             human_delay(1, 2)
 
             # 実際にタイトルが入力された状態になっているか検証する。
@@ -410,8 +413,15 @@ def save_draft(article: Article, headless: bool = True) -> None:
                 log(f"警告: 自動保存の確認ができませんでした(現在のURL: {page.url})。"
                     f"下書きが保存されていない可能性があります。")
 
-            log("自動保存の完了を待機中(6秒)...")
-            page.wait_for_timeout(6000)
+            log("自動保存の完了を待機中(ネットワーク通信が落ち着くまで)...")
+            try:
+                page.wait_for_load_state("networkidle", timeout=20000)
+                log("ネットワーク通信の完了を確認しました。")
+            except PWTimeout:
+                log("警告: ネットワーク通信が20秒以内に落ち着きませんでした。"
+                    "保存が完了していない可能性があります。")
+            # 保険として、念のため追加で数秒待つ
+            page.wait_for_timeout(3000)
             log(f"終了時点のURL: {page.url}")
             log("下書き保存が完了しました。価格設定・公開はnote側で手動で行ってください。")
 
