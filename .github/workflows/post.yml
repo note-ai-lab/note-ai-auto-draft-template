@@ -1,0 +1,45 @@
+name: note auto post
+
+on:
+  workflow_dispatch:
+    inputs:
+      article_file:
+        description: 'テーマを記載したJSONのパス'
+        required: true
+        default: 'topic_example.json'
+  schedule:
+    - cron: '17 3 * * *'
+
+jobs:
+  post:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          pip install -r requirements.txt
+          playwright install --with-deps chromium
+
+      - name: Restore auth state
+        run: echo "${{ secrets.NOTE_AUTH_STATE_B64 }}" | base64 -d > auth_state.json
+
+      - name: Run posting script
+        env:
+          NOTE_EMAIL: ${{ secrets.NOTE_EMAIL }}
+          NOTE_PASSWORD: ${{ secrets.NOTE_PASSWORD }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: |
+          python note_auto_post.py --headless --topic-file "${{ github.event.inputs.article_file || 'topic_example.json' }}"
+
+      - name: Upload debug screenshot
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: debug-screenshot
+          path: debug_screenshot.png
+          if-no-files-found: ignore
