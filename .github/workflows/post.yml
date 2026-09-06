@@ -25,6 +25,9 @@ jobs:
           pip install -r requirements.txt
           playwright install --with-deps chromium
 
+      - name: Install Xvfb (virtual display)
+        run: sudo apt-get update && sudo apt-get install -y xvfb
+
       - name: Restore auth state
         run: echo "${{ secrets.NOTE_AUTH_STATE_B64 }}" | base64 -d > auth_state.json
 
@@ -34,7 +37,7 @@ jobs:
           NOTE_PASSWORD: ${{ secrets.NOTE_PASSWORD }}
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
         run: |
-          python note_auto_post.py --headless --topic-file "${{ github.event.inputs.article_file || 'topic_example.json' }}"
+          xvfb-run -a python note_auto_post.py --topic-file "${{ github.event.inputs.article_file || 'topic_example.json' }}"
 
       - name: Upload debug screenshot
         if: always()
