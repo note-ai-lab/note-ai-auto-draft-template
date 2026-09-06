@@ -1,0 +1,238 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>note Cookie → auth_state 変換ツール</title>
+<style>
+  :root {
+    --bg: #1b1d1f;
+    --panel: #242628;
+    --border: #35383b;
+    --text: #e8e6e1;
+    --muted: #9a9d9f;
+    --accent: #5fb896;
+    --accent-dim: #3d7a63;
+    --danger: #d97b6c;
+    --mono: "SF Mono", "Menlo", "Consolas", monospace;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, "Hiragino Sans", "Yu Gothic", sans-serif;
+    padding: 20px;
+    line-height: 1.6;
+  }
+  .wrap { max-width: 640px; margin: 0 auto; }
+  h1 {
+    font-size: 19px;
+    font-weight: 600;
+    margin: 0 0 4px;
+  }
+  .sub {
+    color: var(--muted);
+    font-size: 13px;
+    margin: 0 0 24px;
+  }
+  .step-label {
+    font-size: 12px;
+    color: var(--accent);
+    font-weight: 600;
+    margin-bottom: 6px;
+  }
+  textarea {
+    width: 100%;
+    min-height: 140px;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    color: var(--text);
+    font-family: var(--mono);
+    font-size: 12px;
+    padding: 12px;
+    resize: vertical;
+  }
+  textarea:focus { outline: none; border-color: var(--accent-dim); }
+  button {
+    background: var(--accent);
+    color: #0f1210;
+    border: none;
+    border-radius: 8px;
+    padding: 12px 20px;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    margin-top: 14px;
+    width: 100%;
+  }
+  button:active { background: var(--accent-dim); }
+  button:disabled {
+    background: var(--border);
+    color: var(--muted);
+    cursor: not-allowed;
+  }
+  .result {
+    margin-top: 22px;
+    display: none;
+  }
+  .result.show { display: block; }
+  .result-box {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 12px;
+    font-family: var(--mono);
+    font-size: 11px;
+    word-break: break-all;
+    max-height: 200px;
+    overflow-y: auto;
+    color: var(--accent);
+  }
+  .copy-btn {
+    background: transparent;
+    border: 1px solid var(--accent);
+    color: var(--accent);
+    margin-top: 8px;
+  }
+  .msg {
+    font-size: 13px;
+    padding: 10px 12px;
+    border-radius: 8px;
+    margin-top: 14px;
+    display: none;
+  }
+  .msg.error {
+    display: block;
+    background: rgba(217, 123, 108, 0.12);
+    color: var(--danger);
+    border: 1px solid rgba(217, 123, 108, 0.3);
+  }
+  .msg.success {
+    display: block;
+    background: rgba(95, 184, 150, 0.1);
+    color: var(--accent);
+    border: 1px solid rgba(95, 184, 150, 0.25);
+  }
+  .note {
+    font-size: 12px;
+    color: var(--muted);
+    margin-top: 24px;
+    border-top: 1px solid var(--border);
+    padding-top: 14px;
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>note Cookie 変換ツール</h1>
+  <p class="sub">Cookie-Editorでエクスポートしたnote.comのCookieを、GitHub Secrets用の文字列に変換します。すべてこの画面内(ブラウザ)で処理され、外部には送信されません。</p>
+
+  <div class="step-label">Cookie-Editorからエクスポートした JSON を貼り付け</div>
+  <textarea id="input" placeholder='[{"domain": ".note.com", "name": "...", "value": "...", ...}, ...]'></textarea>
+
+  <button id="convertBtn" onclick="convert()">変換してSecret用の文字列を作る</button>
+
+  <div id="msg" class="msg"></div>
+
+  <div id="result" class="result">
+    <div class="step-label">この文字列を NOTE_AUTH_STATE_B64 に貼り付け</div>
+    <div class="result-box" id="output"></div>
+    <button class="copy-btn" onclick="copyResult()">コピーする</button>
+  </div>
+
+  <p class="note">
+    仕組み: Cookie-Editorの形式(expirationDate, sameSiteなど)をPlaywrightが読み込める形式(expires, Lax/Strict/None)に変換し、JSON化した上でBase64エンコードしています。処理はすべて手元のブラウザ内(JavaScript)で完結し、どこにも送信されません。
+  </p>
+</div>
+
+<script>
+function mapSameSite(v) {
+  if (!v) return "Lax";
+  const s = String(v).toLowerCase();
+  if (s === "no_restriction" || s === "none") return "None";
+  if (s === "strict") return "Strict";
+  return "Lax";
+}
+
+function convert() {
+  const msgEl = document.getElementById('msg');
+  const resultEl = document.getElementById('result');
+  msgEl.className = 'msg';
+  resultEl.classList.remove('show');
+
+  const raw = document.getElementById('input').value.trim();
+  if (!raw) {
+    msgEl.className = 'msg error';
+    msgEl.textContent = 'Cookie-EditorからエクスポートしたJSONを貼り付けてください。';
+    return;
+  }
+
+  let cookies;
+  try {
+    cookies = JSON.parse(raw);
+    if (!Array.isArray(cookies)) throw new Error('配列形式ではありません');
+  } catch (e) {
+    msgEl.className = 'msg error';
+    msgEl.textContent = 'JSONの読み込みに失敗しました。Cookie-Editorの「Export」→JSON形式でコピーした内容をそのまま貼り付けてください。';
+    return;
+  }
+
+  const converted = cookies
+    .filter(c => c.name && c.domain)
+    .map(c => {
+      const cookie = {
+        name: c.name,
+        value: c.value || "",
+        domain: c.domain,
+        path: c.path || "/",
+        secure: !!c.secure,
+        httpOnly: !!c.httpOnly,
+        sameSite: mapSameSite(c.sameSite)
+      };
+      const exp = c.expirationDate || c.expires;
+      if (exp && !c.session) {
+        cookie.expires = Math.floor(Number(exp));
+      } else {
+        cookie.expires = -1;
+      }
+      return cookie;
+    });
+
+  if (converted.length === 0) {
+    msgEl.className = 'msg error';
+    msgEl.textContent = '有効なCookieが見つかりませんでした。note.comにログインした状態でエクスポートしたか確認してください。';
+    return;
+  }
+
+  const authState = {
+    cookies: converted,
+    origins: []
+  };
+
+  const jsonStr = JSON.stringify(authState);
+  const base64Str = btoa(unescape(encodeURIComponent(jsonStr)));
+
+  document.getElementById('output').textContent = base64Str;
+  resultEl.classList.add('show');
+
+  msgEl.className = 'msg success';
+  msgEl.textContent = `変換完了(${converted.length}件のCookieを変換しました)。下の文字列をコピーしてGitHub Secretsに貼り付けてください。`;
+}
+
+function copyResult() {
+  const text = document.getElementById('output').textContent;
+  navigator.clipboard.writeText(text).then(() => {
+    const msgEl = document.getElementById('msg');
+    msgEl.className = 'msg success';
+    msgEl.textContent = 'コピーしました。GitHub Secretsの画面に貼り付けてください。';
+  }).catch(() => {
+    const msgEl = document.getElementById('msg');
+    msgEl.className = 'msg error';
+    msgEl.textContent = '自動コピーに失敗しました。文字列を長押し(またはドラッグ)して手動でコピーしてください。';
+  });
+}
+</script>
+</body>
+</html>
