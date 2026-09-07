@@ -137,10 +137,26 @@ https://github.com/note-ai-lab/note-ai-auto-draft-template
 
 ■ Secretsへの登録項目
 
+「Secrets」とは、GitHubが提供している「秘密情報の保管庫」です。ここに登録した値は、GitHub Actions実行時にだけ読み込まれ、リポジトリを見ても中身は表示されません(一度保存すると、自分自身でも中身を見返すことはできません)。パスワードやAPIキーなど、他人に見られたくない情報はすべてここに登録します。
+
+【登録の場所】
+複製したリポジトリのページを開き、上部の「Settings」タブ→左メニューの「Secrets and variables」→「Actions」と進みます。「New repository secret」というボタンから、1つずつ登録していきます。
+
+【登録する4つの項目】
+
 ・NOTE_EMAIL … noteのログイン用メールアドレス
+　(例:Nameの欄に「NOTE_EMAIL」、Secretの欄に自分のnoteログイン用メールアドレスを入力)
+
 ・NOTE_PASSWORD … noteのログインパスワード
-・NOTE_AUTH_STATE_B64 … noteのログイン状態を保存したデータ(cookie_converter.htmlで作成します)
-・GEMINI_API_KEY … Google Gemini APIのキー(aistudio.google.comで無料発行できます)
+　(Nameの欄に「NOTE_PASSWORD」、Secretの欄に自分のnoteのパスワードを入力)
+
+・NOTE_AUTH_STATE_B64 … noteのログイン状態を保存したデータ
+　(これだけは単純な文字列ではなく、後述の「認証情報(Cookie)の作り方」の手順で作成した長い文字列を貼り付けます)
+
+・GEMINI_API_KEY … Google Gemini APIのキー
+　(aistudio.google.comにアクセスし、Googleアカウントでログイン後「Get API key」→「Create API key」で発行できます。表示された「AIzaで始まる文字列」をコピーして貼り付けます)
+
+4つとも登録し終えると、Secrets一覧に4つの名前が並んでいる状態になります。この4つが揃っていないと、ワークフローの実行時にエラーになりますので、登録漏れがないか一度見直してから次に進んでください。
 
 ■ 認証情報(Cookie)の作り方
 
@@ -153,6 +169,21 @@ https://github.com/note-ai-lab/note-ai-auto-draft-template
 5. 変換された文字列をコピーし、GitHubのSecretsの NOTE_AUTH_STATE_B64 に貼り付ける
 
 Cookieには有効期限があるため、数週間〜数ヶ月に一度、同じ手順で更新が必要です。
+
+■ 自動実行のスケジュールについて
+
+このテンプレートには、あらかじめ「毎日決まった時刻に自動実行する」設定が入っています(`.github/workflows/post.yml`内の`schedule`という部分です)。何もしなければ、複製した直後からこのスケジュールで動き始めるので注意してください。
+
+【スケジュールの変更・停止方法】
+
+自動実行の時刻を変えたい、あるいは一旦止めたい場合は、`.github/workflows/post.yml`内の以下の部分を編集します。
+
+    schedule:
+      - cron: '17 3 * * *'
+
+この`cron`の値は協定世界時(UTC)で書かれているため、日本時間に直すには9時間を足します(例の`3:17`は日本時間の`12:17`です)。時刻を変えたい場合は、日本時間から9時間引いた時刻に書き換えてください。
+
+自動実行を完全に止めたい場合は、この2行を削除するか、行頭に`#`を付けてコメントアウトしてください。あるいは、GitHubの「Actions」タブ→対象のワークフローを開き、右上の「•••」メニューから「Disable workflow」を選ぶと、手動実行も含めて完全に停止できます(再開したい時は同じ場所から「Enable workflow」を選びます)。
 
 ■ カスタマイズすべき箇所(ここだけ変えればOK)
 
