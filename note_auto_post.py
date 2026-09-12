@@ -12,7 +12,9 @@ note AI記事生成 + 下書き自動投稿スクリプト(低負荷設計)
 - サーバー負荷を抑えるため、操作間に人間の操作並みのランダムな待機時間を入れる
 - 1回の実行につき投稿は1本のみ(まとめて連投しない)
 - ログインは Cookie を保存して使い回し、毎回のパスワード送信を避ける
-- 失敗時は自動リトライせず、ログを残して人間が確認する設計(暴走防止)
+- Gemini APIが一時的に混雑している場合(503エラー等)は自動で再試行するが、
+  それ以外の失敗(セレクタ不一致など)は自動リトライせず、ログを残して
+  人間が確認する設計(暴走防止)
 
 【事前準備】
 1. pip install playwright google-genai --break-system-packages
@@ -131,7 +133,7 @@ https://github.com/note-ai-lab/note-ai-auto-draft-template
 
 ・note_auto_post.py … 記事生成〜下書き保存までを行うメインのスクリプト
 ・requirements.txt … 必要なライブラリの一覧
-・topic_example.json … 記事のテーマを指定するファイル(ここを書き換えるだけで、毎回違うテーマの記事が作れます)
+・topic_example.json … 記事の切り口(想定読者)を指定するファイル(ここを書き換えるだけで、毎回違う切り口の導入文が作れます)
 ・post.yml … GitHub Actionsの実行設定ファイル
 ・cookie_converter.html … noteのログイン情報を、パソコンにPythonを一切インストールせずに変換できる専用ツール
 
@@ -187,9 +189,10 @@ Cookieには有効期限があるため、数週間〜数ヶ月に一度、同�
 
 ■ カスタマイズすべき箇所(ここだけ変えればOK)
 
-・topic_example.json の "topic" … 書いてほしい記事のテーマを指定します
+・topic_example.json の "angle" … 今回はどんな読者に向けて書くか、切り口を指定します
+　(例:「副業に興味がある会社員向け」「文章を書くのが苦手な人向け」など。ここを書き換えるだけで、
+　同じ商品でも読者層に合わせた無料部分(導入文)が毎回生成されます)
 ・topic_example.json の "guidelines" … 文体やトーンの指示(「〜だ、〜である調で」「初心者向けに」など)
-・topic_example.json の "target_chars" … 記事のおおよその文字数
 ・note_auto_post.py 内の GEMINI_MODEL … 使用するGeminiのモデル名(無料枠の上限や文章のクオリティに応じて変更可能)
 ・post.yml 内の cron … 自動実行したい時間(協定世界時での指定のため、日本時間から9時間引いて設定してください)
 
@@ -261,10 +264,29 @@ AI・GitHub Actions・noteを連携させて、記事作成からnoteへの下�
 """
 
     log(f"Gemini ({GEMINI_MODEL}) で無料部分(導入文)を生成中... 切り口: {angle}")
-    response = client.models.generate_content(
-        model=GEMINI_MODEL,
-        contents=prompt,
-    )
+
+    # Gemini側が混雑している場合(503 UNAVAILABLEなど)、少し待って再試行する。
+    max_retries = 4
+    response = None
+    for attempt in range(1, max_retries + 1):
+        try:
+            response = client.models.generate_content(
+                model=GEMINI_MODEL,
+                contents=prompt,
+            )
+            break
+        except Exception as e:
+            error_text = str(e)
+            is_transient = "503" in error_text or "UNAVAILABLE" in error_text or "overloaded" in error_text.lower()
+            if is_transient and attempt < max_retries:
+                wait_seconds = 15 * attempt  # 15秒, 30秒, 45秒... と待ち時間を伸ばす
+                log(f"Geminiが混雑しているようです(試行{attempt}/{max_retries})。"
+                    f"{wait_seconds}秒待って再試行します。")
+                time.sleep(wait_seconds)
+            else:
+                log(f"Gemini APIの呼び出しに失敗しました: {error_text}")
+                sys.exit(1)
+
     raw_text = (response.text or "").strip()
 
     if raw_text.startswith("```"):
@@ -288,10 +310,19 @@ AI・GitHub Actions・noteを連携させて、記事作成からnoteへの下�
 
     log(f"導入文を生成しました。タイトル: {title}")
 
-    # 無料部分(AI生成・毎回変わる)+ 有料部分(固定)を結合
-    full_body = f"{hook}\n\n{PAID_CONTENT}"
-    return Article(title=title, body=full_body, hook=hook, fixed_part=PAID_CONTENT)
+    # 無料部分(AI生成)の末尾に、固定の説明文を追加する。
+    # この記事が note・GitHub・Gemini を組み合わせた半自動化の解説であることを
+    # 読者に明示するための一文(毎回同じ内容)。
+    hook_note = (
+        "この記事の有料部分では、note・GitHub・Google Gemini(AI)の3つを連携させ、"
+        "記事作成からnoteへの下書き保存までを半自動化する仕組みの作り方を、"
+        "実際のコード付きで解説しています。"
+    )
+    hook_with_note = f"{hook}\n\n{hook_note}"
 
+    # 無料部分(AI生成・毎回変わる)+ 有料部分(固定)を結合
+    full_body = f"{hook_with_note}\n\n{PAID_CONTENT}"
+    return Article(title=title, body=full_body, hook=hook_with_note, fixed_part=PAID_CONTENT)
 
 
 def login_and_save_state(email: str, password: str) -> None:

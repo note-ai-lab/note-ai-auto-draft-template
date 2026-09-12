@@ -5,7 +5,7 @@ Google Gemini(AI)・GitHub Actions・noteを連携させて、記事作成から
 
 ## できること
 
-- テーマを1つ指定するだけで、Gemini AIが記事のタイトル・本文を自動生成
+- 記事の切り口(想定読者)を1つ指定するだけで、Gemini AIが導入文を自動生成
 - 生成した記事をnoteの下書きに自動保存
 - 価格設定・公開は仕様上手動(下書き確認後、ご自身で設定してください)
 
@@ -23,7 +23,7 @@ Google Gemini(AI)・GitHub Actions・noteを連携させて、記事作成から
 1. このテンプレートを「Use this template」から複製
 2. GitHubのSecretsに `NOTE_EMAIL` / `NOTE_PASSWORD` / `NOTE_AUTH_STATE_B64` / `GEMINI_API_KEY` を登録
 3. `cookie_converter.html` を使って認証情報を作成
-4. `topic_example.json` にテーマを記入
+4. `topic_example.json` の "angle"(切り口)を記入
 5. GitHub Actionsの「Run workflow」で実行
 
 ## ファイル構成
@@ -32,7 +32,7 @@ Google Gemini(AI)・GitHub Actions・noteを連携させて、記事作成から
 |---|---|
 | `note_auto_post.py` | メインスクリプト |
 | `requirements.txt` | 必要なライブラリ |
-| `topic_example.json` | テーマ指定用ファイル |
+| `topic_example.json` | 記事の切り口(想定読者)を指定するファイル |
 | `.github/workflows/post.yml` | GitHub Actionsの実行設定 |
 | `cookie_converter.html` | 認証情報変換ツール |
 
